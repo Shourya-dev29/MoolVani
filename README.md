@@ -230,5 +230,5 @@ If total pipeline latency exceeds 3,000 ms, the system highlights the slowest st
 ---
 
 ## License
-Developed for the Smart India Hackathon 2024 under the guidance of the Government of Jharkhand.
+Developed for the Smart India Hackathon 2026 under the guidance of the Government of Jharkhand.
 Distributed under the Apache 2.0 Open Source License.
