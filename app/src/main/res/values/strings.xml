@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PALASH VoiceBridge</string>
+    <string name="app_tagline">Teach in Hindi. Learn in Your Mother Tongue.</string>
+    <string name="offline_ready">&#x25CF; OFFLINE READY</string>
+    <string name="demo_mode">DEMO MODE</string>
+    <string name="translation_unavailable">Translation not available for this phrase.</string>
+    <string name="model_missing">Model not installed</string>
+    <string name="prototype_language">Prototype language — content/model not installed.</string>
+</resources>

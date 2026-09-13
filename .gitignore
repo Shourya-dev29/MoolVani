@@ -1,0 +1,37 @@
+﻿*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+*.onnx
+*.bin
+*.gguf
+*.pt
+*.tflite
+app/src/main/assets/models/**
+*.apk
+*.aab
+# Android Studio
+.idea/
+*.iml
+
+# Gradle
+.gradle/
+local.properties
+**/build/
+
+# Native build
+.cxx/
+.externalNativeBuild/
+
+# Logs
+*.log
+
+# OS files
+Thumbs.db
+.DS_Store
