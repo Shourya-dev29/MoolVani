@@ -62,10 +62,11 @@ class SherpaSpeechRecognizer(
          * Checks if required Hindi ASR model files are present in the Android assets.
          */
         fun isModelAvailable(assetManager: AssetManager, dir: String = "models/asr/hindi"): Boolean {
-            val required = listOf("encoder.onnx", "decoder.onnx", "joiner.onnx", "tokens.txt")
             return try {
                 val list = assetManager.list(dir) ?: return false
-                required.all { req -> list.any { it.equals(req, ignoreCase = true) } }
+                val hasEncoder = list.any { it.equals("encoder.int8.onnx", ignoreCase = true) || it.equals("encoder.onnx", ignoreCase = true) }
+                val hasTokens = list.any { it.equals("tokens.txt", ignoreCase = true) }
+                hasEncoder && hasTokens
             } catch (e: Exception) {
                 false
             }
@@ -86,14 +87,20 @@ class SherpaSpeechRecognizer(
         }
 
         try {
-            // Dynamically instantiate SherpaOnnx OnlineRecognizer with Zipformer config
+            // Dynamically instantiate SherpaOnnx OnlineRecognizer with Zipformer2 CTC config
             val recognizerClass = Class.forName("com.k2fsa.sherpa.onnx.OnlineRecognizer")
             val configClass = Class.forName("com.k2fsa.sherpa.onnx.OnlineRecognizerConfig")
             val modelConfigClass = Class.forName("com.k2fsa.sherpa.onnx.OnlineModelConfig")
             val zipformerConfigClass = Class.forName("com.k2fsa.sherpa.onnx.OnlineZipformer2CtcModelConfig")
 
+            // Determine actual encoder file name
+            val assetFiles = context.assets.list(modelDir) ?: emptyArray()
+            val encoderFile = assetFiles.firstOrNull { it.equals("encoder.int8.onnx", ignoreCase = true) }
+                ?: assetFiles.firstOrNull { it.equals("encoder.onnx", ignoreCase = true) }
+                ?: "encoder.int8.onnx"
+
             val zipformerConfig = zipformerConfigClass.getConstructor().newInstance()
-            zipformerConfigClass.getField("model").set(zipformerConfig, "$modelDir/encoder.onnx")
+            zipformerConfigClass.getField("model").set(zipformerConfig, "$modelDir/$encoderFile")
 
             val modelConfig = modelConfigClass.getConstructor().newInstance()
             modelConfigClass.getField("tokens").set(modelConfig, "$modelDir/tokens.txt")
@@ -111,10 +118,10 @@ class SherpaSpeechRecognizer(
             nativeStream = createStreamMethod.invoke(nativeRecognizer)
 
             _isReady = true
-            Log.i(TAG, "Sherpa-ONNX OnlineRecognizer initialized successfully.")
+            Log.i(TAG, "PALASH_ASR: recognizer initialized with $modelDir/$encoderFile")
             true
         } catch (t: Throwable) {
-            Log.e(TAG, "Failed to initialize Sherpa-ONNX OnlineRecognizer: ${t.message}", t)
+            Log.e(TAG, "PALASH_ASR_ERROR: Failed to initialize Sherpa-ONNX OnlineRecognizer: ${t.message}", t)
             _isReady = false
             false
         }
@@ -123,6 +130,7 @@ class SherpaSpeechRecognizer(
     override suspend fun recognize(audioData: ShortArray): SpeechRecognitionResult = withContext(Dispatchers.Default) {
         if (!_isReady || nativeRecognizer == null) {
             val errorMsg = if (!isRuntimeAvailable()) ERROR_MISSING_AAR else ERROR_MISSING_MODELS
+            Log.w(TAG, "PALASH_ASR_ERROR: Cannot recognize, recognizer not ready: $errorMsg")
             return@withContext SpeechRecognitionResult(
                 text = "",
                 confidence = 0f,
@@ -140,6 +148,7 @@ class SherpaSpeechRecognizer(
             val latency = System.currentTimeMillis() - startTime
             result.copy(latencyMs = latency)
         } catch (t: Throwable) {
+            Log.e(TAG, "PALASH_ASR_ERROR: Recognition inference error: ${t.message}", t)
             SpeechRecognitionResult(
                 text = "",
                 confidence = 0f,
@@ -153,6 +162,7 @@ class SherpaSpeechRecognizer(
 
     override fun startStreaming(): Flow<SpeechRecognitionResult> = flow {
         if (!_isReady || nativeRecognizer == null) {
+            Log.w(TAG, "PALASH_ASR_ERROR: Cannot start stream, recognizer not ready")
             emit(
                 SpeechRecognitionResult(
                     text = "",
@@ -183,6 +193,7 @@ class SherpaSpeechRecognizer(
                 )
             )
         } catch (e: Exception) {
+            Log.e(TAG, "PALASH_ASR_ERROR: Stream start failed: ${e.message}", e)
             emit(
                 SpeechRecognitionResult(
                     text = "",
@@ -206,6 +217,7 @@ class SherpaSpeechRecognizer(
             val streamClass = nativeStream!!.javaClass
             val acceptWaveform = streamClass.getMethod("acceptWaveform", FloatArray::class.java, Int::class.javaPrimitiveType)
             acceptWaveform.invoke(nativeStream, floatSamples, 16000)
+            Log.d(TAG, "PALASH_ASR: samples accepted=${chunk.size}")
 
             val recognizerClass = nativeRecognizer!!.javaClass
             val isReadyMethod = recognizerClass.getMethod("isReady", streamClass)
@@ -217,15 +229,19 @@ class SherpaSpeechRecognizer(
 
             val getResultMethod = recognizerClass.getMethod("getResult", streamClass)
             val resultObj = getResultMethod.invoke(nativeRecognizer, nativeStream)
-            val textProp = resultObj.javaClass.getField("text")
-            lastRecognizedText = textProp.get(resultObj) as? String ?: ""
+            val text = extractTextFromResult(resultObj)
+            if (text.isNotBlank() && text != lastRecognizedText) {
+                lastRecognizedText = text
+                Log.i(TAG, "PALASH_ASR: partial=\"$lastRecognizedText\"")
+            }
         } catch (t: Throwable) {
-            Log.e(TAG, "Audio feed error: ${t.message}")
+            Log.e(TAG, "PALASH_ASR_ERROR: Audio feed error: ${t.message}", t)
         }
     }
 
     override suspend fun stopStreaming(): SpeechRecognitionResult = withContext(Dispatchers.Default) {
         if (!_isReady || nativeRecognizer == null || nativeStream == null) {
+            Log.w(TAG, "PALASH_ASR_ERROR: Cannot stop stream, recognizer not ready")
             return@withContext SpeechRecognitionResult(
                 text = "",
                 confidence = 0f,
@@ -251,8 +267,10 @@ class SherpaSpeechRecognizer(
 
             val getResultMethod = recognizerClass.getMethod("getResult", streamClass)
             val resultObj = getResultMethod.invoke(nativeRecognizer, nativeStream)
-            val textProp = resultObj.javaClass.getField("text")
-            val finalText = (textProp.get(resultObj) as? String)?.trim() ?: lastRecognizedText
+            val extracted = extractTextFromResult(resultObj).trim()
+            val finalText = if (extracted.isNotBlank()) extracted else lastRecognizedText.trim()
+
+            Log.i(TAG, "PALASH_ASR: final=\"$finalText\"")
 
             SpeechRecognitionResult(
                 text = finalText,
@@ -262,6 +280,7 @@ class SherpaSpeechRecognizer(
                 mode = RecognitionMode.LIVE_ASR
             )
         } catch (t: Throwable) {
+            Log.e(TAG, "PALASH_ASR_ERROR: Error finishing recognition: ${t.message}", t)
             SpeechRecognitionResult(
                 text = lastRecognizedText,
                 confidence = 0f,
@@ -270,6 +289,27 @@ class SherpaSpeechRecognizer(
                 mode = RecognitionMode.ERROR,
                 errorMessage = "Error finishing recognition: ${t.message}"
             )
+        }
+    }
+
+    private fun extractTextFromResult(resultObj: Any?): String {
+        if (resultObj == null) return ""
+        return try {
+            val method = resultObj.javaClass.getMethod("getText")
+            method.invoke(resultObj) as? String ?: ""
+        } catch (_: NoSuchMethodException) {
+            try {
+                val field = resultObj.javaClass.getDeclaredField("text")
+                field.isAccessible = true
+                field.get(resultObj) as? String ?: ""
+            } catch (_: Throwable) {
+                try {
+                    val field = resultObj.javaClass.getField("text")
+                    field.get(resultObj) as? String ?: ""
+                } catch (_: Throwable) {
+                    ""
+                }
+            }
         }
     }
 

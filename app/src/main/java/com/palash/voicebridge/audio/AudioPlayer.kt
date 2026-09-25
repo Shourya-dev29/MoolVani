@@ -1,4 +1,4 @@
-﻿package com.palash.voicebridge.audio
+package com.palash.voicebridge.audio
 
 import android.media.AudioAttributes
 import android.media.AudioFormat
@@ -39,6 +39,7 @@ class AudioPlayer {
                 AudioFormat.ENCODING_PCM_16BIT
             )
 
+            val bufferSize = maxOf(minBufferSize, audioData.size * 2)
             val track = AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
@@ -53,28 +54,48 @@ class AudioPlayer {
                         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                         .build()
                 )
-                .setBufferSizeInBytes(maxOf(minBufferSize, audioData.size * 2))
+                .setBufferSizeInBytes(bufferSize)
                 .setTransferMode(AudioTrack.MODE_STATIC)
                 .build()
 
             audioTrack = track
+            val isInit = track.state == AudioTrack.STATE_INITIALIZED
+            Log.i(TAG, "PALASH_TTS: AudioTrack created, state=${track.state}, audioTrackInitialized=$isInit, sampleRate=$sampleRate, bufferSize=$bufferSize")
+
+            if (!isInit) {
+                Log.e(TAG, "PALASH_TTS_ERROR: AudioTrack failed to initialize, state=${track.state}")
+                track.release()
+                return@withContext
+            }
 
             try {
-                track.write(audioData, 0, audioData.size)
+                val written = track.write(audioData, 0, audioData.size)
+                Log.i(TAG, "PALASH_TTS: writeResult=$written, samplesWritten=$written (expected ${audioData.size})")
+
+                if (written < 0) {
+                    Log.e(TAG, "PALASH_TTS_ERROR: AudioTrack write failed with code $written")
+                    return@withContext
+                }
+
                 track.play()
                 isPlaying = true
-                Log.d(TAG, "Playing ${audioData.size} samples at ${sampleRate}Hz")
+                Log.i(TAG, "PALASH_TTS: playbackStarted=true, playState=${track.playState}")
 
                 // Wait for playback to finish
-                while (isPlaying && track.playbackHeadPosition < audioData.size) {
-                    kotlinx.coroutines.delay(50)
+                while (isPlaying && track.playState == AudioTrack.PLAYSTATE_PLAYING && track.playbackHeadPosition < audioData.size) {
+                    kotlinx.coroutines.delay(40)
                 }
+                Log.i(TAG, "PALASH_TTS: playbackCompleted=true")
             } catch (e: Exception) {
-                Log.e(TAG, "Playback error: ${e.message}")
+                Log.e(TAG, "PALASH_TTS_ERROR: Playback error: ${e.message}", e)
             } finally {
                 isPlaying = false
-                track.stop()
-                track.release()
+                try {
+                    track.stop()
+                    track.release()
+                } catch (e: Exception) {
+                    Log.w(TAG, "AudioTrack cleanup error: ${e.message}")
+                }
                 if (audioTrack === track) audioTrack = null
             }
         }

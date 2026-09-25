@@ -3,6 +3,8 @@ package com.palash.voicebridge.ui.worksheets
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.palash.voicebridge.data.local.AppDatabase
@@ -43,141 +46,335 @@ fun WorksheetGeneratorScreen(onNavigateBack: () -> Unit) {
     )
 
     Scaffold(
-        topBar = { PalashTopBar("Worksheet Generator", onNavigateBack) }
+        topBar = {
+            PalashTopBar(
+                title = "Worksheets",
+                subtitle = "Create printable classroom practice material",
+                onNavigateBack = onNavigateBack
+            )
+        }
     ) { pad ->
-        Row(
-            modifier = Modifier.fillMaxSize().padding(pad)
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(pad)
+                .background(BackgroundLight)
         ) {
-            // Left panel — settings
-            Column(
-                modifier = Modifier.weight(0.45f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text("Generate Bilingual Worksheet", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Creates a printable A4 PDF with Hindi and Santhali text.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val isWide = maxWidth >= 760.dp
 
-                OutlinedTextField(
-                    value = className,
-                    onValueChange = { className = it },
-                    label = { Text("Class / Grade") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp)
-                )
+            if (isWide) {
+                // Wide / Tablet Layout
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(0.48f)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        WorksheetControlsCard(
+                            className = className,
+                            onClassNameChange = { className = it },
+                            selectedTopic = selectedTopic,
+                            onTopicSelect = { selectedTopic = it },
+                            topics = topics,
+                            isGenerating = isGenerating,
+                            onGenerate = {
+                                isGenerating = true
+                                statusMessage = "Generating PDF..."
+                                scope.launch {
+                                    try {
+                                        val repo = CurriculumRepository(AppDatabase.getInstance(context).curriculumDao())
+                                        val phrases = repo.getAllPhrasesSync().filter {
+                                            it.topic.contains(selectedTopic, ignoreCase = true) ||
+                                            it.domain.replace("_", " ").contains(selectedTopic, ignoreCase = true)
+                                        }.take(10).ifEmpty { repo.getAllPhrasesSync().take(10) }
 
-                Text("Select Topic:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                topics.chunked(2).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        row.forEach { topic ->
-                            FilterChip(
-                                selected = selectedTopic == topic,
-                                onClick = { selectedTopic = topic },
-                                label = { Text(topic, style = MaterialTheme.typography.labelSmall) },
-                                modifier = Modifier.weight(1f),
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = PalashGreen,
-                                    selectedLabelColor = Color.White
-                                )
+                                        val generator = WorksheetGenerator(context)
+                                        val file = generator.generate(
+                                            phrases = phrases,
+                                            topic = selectedTopic,
+                                            className = className
+                                        )
+                                        generatedFile = file
+                                        statusMessage = "Worksheet generated successfully!"
+                                    } catch (e: Exception) {
+                                        statusMessage = "Could not generate PDF. Please try again."
+                                    } finally {
+                                        isGenerating = false
+                                    }
+                                }
+                            }
+                        )
+
+                        if (statusMessage.isNotBlank()) {
+                            Text(
+                                text = statusMessage,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (statusMessage.contains("Could not")) ErrorRed else OfflineReadyGreen
                             )
                         }
                     }
-                }
 
-                Button(
-                    onClick = {
-                        isGenerating = true
-                        statusMessage = "Generating PDF..."
-                        scope.launch {
-                            try {
-                                val repo = CurriculumRepository(AppDatabase.getInstance(context).curriculumDao())
-                                val phrases = repo.getAllPhrasesSync().filter {
-                                    it.topic.contains(selectedTopic, ignoreCase = true) ||
-                                    it.domain.replace("_", " ").contains(selectedTopic, ignoreCase = true)
-                                }.take(10).ifEmpty { repo.getAllPhrasesSync().take(10) }
+                    VerticalDivider(color = OutlineBorderLight)
 
-                                val generator = WorksheetGenerator(context)
-                                val file = generator.generate(
-                                    phrases = phrases,
-                                    topic = selectedTopic,
-                                    className = className
-                                )
-                                generatedFile = file
-                                statusMessage = "Worksheet generated! Tap below to open."
-                            } catch (e: Exception) {
-                                statusMessage = "Error: ${e.message}"
-                            } finally {
-                                isGenerating = false
-                            }
-                        }
-                    },
-                    enabled = !isGenerating,
-                    colors = ButtonDefaults.buttonColors(containerColor = PalashGreen),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    if (isGenerating) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
-                    } else {
-                        Icon(Icons.Filled.PictureAsPdf, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("GENERATE WORKSHEET (PDF)", fontWeight = FontWeight.Bold)
+                    Column(
+                        modifier = Modifier
+                            .weight(0.52f)
+                            .fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        WorksheetPreviewCard(
+                            context = context,
+                            generatedFile = generatedFile
+                        )
                     }
                 }
+            } else {
+                // Phone / Portrait Layout
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    WorksheetControlsCard(
+                        className = className,
+                        onClassNameChange = { className = it },
+                        selectedTopic = selectedTopic,
+                        onTopicSelect = { selectedTopic = it },
+                        topics = topics,
+                        isGenerating = isGenerating,
+                        onGenerate = {
+                            isGenerating = true
+                            statusMessage = "Generating PDF..."
+                            scope.launch {
+                                try {
+                                    val repo = CurriculumRepository(AppDatabase.getInstance(context).curriculumDao())
+                                    val phrases = repo.getAllPhrasesSync().filter {
+                                        it.topic.contains(selectedTopic, ignoreCase = true) ||
+                                        it.domain.replace("_", " ").contains(selectedTopic, ignoreCase = true)
+                                    }.take(10).ifEmpty { repo.getAllPhrasesSync().take(10) }
 
-                if (statusMessage.isNotBlank()) {
-                    Text(statusMessage, style = MaterialTheme.typography.bodyMedium,
-                        color = if (statusMessage.startsWith("Error")) ErrorRed else OfflineReadyGreen)
+                                    val generator = WorksheetGenerator(context)
+                                    val file = generator.generate(
+                                        phrases = phrases,
+                                        topic = selectedTopic,
+                                        className = className
+                                    )
+                                    generatedFile = file
+                                    statusMessage = "Worksheet generated successfully!"
+                                } catch (e: Exception) {
+                                    statusMessage = "Could not generate PDF. Please try again."
+                                } finally {
+                                    isGenerating = false
+                                }
+                            }
+                        }
+                    )
+
+                    if (statusMessage.isNotBlank()) {
+                        Text(
+                            text = statusMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (statusMessage.contains("Could not")) ErrorRed else OfflineReadyGreen
+                        )
+                    }
+
+                    WorksheetPreviewCard(
+                        context = context,
+                        generatedFile = generatedFile
+                    )
                 }
+            }
+        }
+    }
+}
 
-                generatedFile?.let { file ->
-                    OutlinedButton(
-                        onClick = { openPdf(context, file) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Filled.OpenInNew, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Open Worksheet PDF")
+@Composable
+private fun WorksheetControlsCard(
+    className: String,
+    onClassNameChange: (String) -> Unit,
+    selectedTopic: String,
+    onTopicSelect: (String) -> Unit,
+    topics: List<String>,
+    isGenerating: Boolean,
+    onGenerate: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceLight),
+        border = BorderStroke(1.dp, OutlineBorderLight),
+        elevation = CardDefaults.cardElevation(1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Worksheet Configuration",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimaryLight
+            )
+            Text(
+                text = "Generates printable A4 practice sheets with Hindi and Santali (Ol Chiki) exercises.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondaryLight
+            )
+
+            OutlinedTextField(
+                value = className,
+                onValueChange = onClassNameChange,
+                label = { Text("Class / Grade Level") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(10.dp)
+            )
+
+            Text(
+                text = "Select Lesson Topic:",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimaryLight
+            )
+
+            topics.chunked(2).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    row.forEach { topic ->
+                        FilterChip(
+                            selected = selectedTopic == topic,
+                            onClick = { onTopicSelect(topic) },
+                            label = { Text(topic, style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.weight(1f),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PalashGreen,
+                                selectedLabelColor = Color.White
+                            )
+                        )
                     }
                 }
             }
 
-            VerticalDivider()
-
-            // Right panel — preview placeholder
-            Column(
-                modifier = Modifier.weight(0.55f).fillMaxHeight().padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+            Button(
+                onClick = onGenerate,
+                enabled = !isGenerating,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = PalashGreen,
+                    contentColor = Color.White
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(10.dp)
             ) {
-                if (generatedFile == null) {
-                    Icon(Icons.Filled.Description, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f), modifier = Modifier.size(80.dp))
-                    Spacer(Modifier.height(12.dp))
-                    Text("PDF worksheet preview will appear here", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-                    Text("Select a topic and tap Generate Worksheet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                if (isGenerating) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
                 } else {
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = PalashGreenSurface)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(Icons.Filled.CheckCircle, null, tint = OfflineReadyGreen, modifier = Modifier.size(48.dp))
-                            Text("Worksheet Generated!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = PalashGreen)
-                            Text(generatedFile!!.name, style = MaterialTheme.typography.bodyMedium)
-                            Text("${generatedFile!!.length() / 1024} KB | A4 Format", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Button(
-                                onClick = { openPdf(context, generatedFile!!) },
-                                colors = ButtonDefaults.buttonColors(containerColor = PalashGreen)
-                            ) {
-                                Icon(Icons.Filled.OpenInNew, null)
-                                Spacer(Modifier.width(6.dp))
-                                Text("Open PDF", fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.Filled.PictureAsPdf,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Generate Worksheet (PDF)", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorksheetPreviewCard(context: Context, generatedFile: File?) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (generatedFile != null) PalashGreenContainer else SurfaceLight
+        ),
+        border = BorderStroke(1.dp, OutlineBorderLight),
+        elevation = CardDefaults.cardElevation(1.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (generatedFile == null) {
+                Icon(
+                    imageVector = Icons.Filled.Description,
+                    contentDescription = null,
+                    tint = TextMutedLight,
+                    modifier = Modifier.size(56.dp)
+                )
+                Text(
+                    text = "PDF Preview Ready",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimaryLight
+                )
+                Text(
+                    text = "Select a topic and tap Generate Worksheet to create a printable PDF.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondaryLight,
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = OfflineReadyGreen,
+                    modifier = Modifier.size(48.dp)
+                )
+                Text(
+                    text = "Worksheet Generated!",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = PalashGreen
+                )
+                Text(
+                    text = generatedFile.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextPrimaryLight
+                )
+                Text(
+                    text = "${generatedFile.length() / 1024} KB • Ready for Classroom Printing",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondaryLight
+                )
+                Button(
+                    onClick = { openPdf(context, generatedFile) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PalashGreen,
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier.height(48.dp),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.OpenInNew,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Open Worksheet PDF", fontWeight = FontWeight.Bold)
                 }
             }
         }

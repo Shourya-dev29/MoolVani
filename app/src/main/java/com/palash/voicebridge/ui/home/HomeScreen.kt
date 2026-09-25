@@ -1,12 +1,16 @@
-﻿package com.palash.voicebridge.ui.home
+package com.palash.voicebridge.ui.home
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,97 +41,89 @@ fun HomeScreen(
 
     Scaffold(
         topBar = {
-            HomeTopBar(uiState, onNavigateToSettings)
+            HomeTopBar(
+                isOfflineReady = uiState.isOfflineReady,
+                onSettings = onNavigateToSettings
+            )
         }
     ) { padding ->
-        Row(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(MaterialTheme.colorScheme.background)
+                .background(BackgroundLight)
         ) {
-            // Left panel - main actions (60%)
-            Column(
-                modifier = Modifier
-                    .weight(0.6f)
-                    .fillMaxHeight()
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Hero translation card
-                HeroTranslationCard(
-                    onStart = onNavigateToTranslator,
-                    modifier = Modifier.fillMaxWidth()
-                )
+            val isTabletOrWide = maxWidth >= 760.dp
 
-                // Demo mode banner if applicable
-                if (!uiState.isLiveAiMode) {
-                    DemoModeBanner()
-                }
-
-                // Feature grid
-                Text(
-                    "Tools",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
+            if (isTabletOrWide) {
+                // Wide / Tablet Layout (Two Columns)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 24.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    FeatureCard(
-                        icon = Icons.Filled.MenuBook,
-                        title = "Curriculum",
-                        subtitle = "Browse phrases",
-                        color = PalashGreen,
-                        onClick = onNavigateToCurriculum,
-                        modifier = Modifier.weight(1f)
-                    )
-                    FeatureCard(
-                        icon = Icons.Filled.Description,
-                        title = "Worksheets",
-                        subtitle = "Generate PDF",
-                        color = PalashAmber,
-                        onClick = onNavigateToWorksheets,
-                        modifier = Modifier.weight(1f)
-                    )
-                    FeatureCard(
-                        icon = Icons.Filled.Style,
-                        title = "Flashcards",
-                        subtitle = "Visual cards",
-                        color = PalashEarth,
-                        onClick = onNavigateToFlashcards,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(
+                        modifier = Modifier
+                            .weight(1.1f)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        HeroVoiceSection(onStart = onNavigateToTranslator)
+                        OfflineStatusBreakdownCard(
+                            isOfflineReady = uiState.isOfflineReady,
+                            hasHindiVoice = uiState.asrStatus == "Ready",
+                            hasSantaliVoice = uiState.ttsStatus == "Ready",
+                            curriculumPhraseCount = uiState.curriculumCount
+                        )
+                        NipunBharatCard()
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(0.9f)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        ToolsGridSection(
+                            onCurriculum = onNavigateToCurriculum,
+                            onWorksheets = onNavigateToWorksheets,
+                            onFlashcards = onNavigateToFlashcards,
+                            onSettings = onNavigateToSettings
+                        )
+                        SystemStatusCard(uiState = uiState)
+                    }
                 }
+            } else {
+                // Phone / Narrow Layout (Single Responsive Column)
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    HeroVoiceSection(onStart = onNavigateToTranslator)
 
-                // NIPUN Bharat alignment notice
-                NipunBharatCard()
-            }
+                    OfflineStatusBreakdownCard(
+                        isOfflineReady = uiState.isOfflineReady,
+                        hasHindiVoice = uiState.asrStatus == "Ready",
+                        hasSantaliVoice = uiState.ttsStatus == "Ready",
+                        curriculumPhraseCount = uiState.curriculumCount
+                    )
 
-            // Right panel - status dashboard (40%)
-            Column(
-                modifier = Modifier
-                    .weight(0.4f)
-                    .fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text(
-                    "System Status",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
+                    ToolsGridSection(
+                        onCurriculum = onNavigateToCurriculum,
+                        onWorksheets = onNavigateToWorksheets,
+                        onFlashcards = onNavigateToFlashcards,
+                        onSettings = onNavigateToSettings
+                    )
 
-                StatusCard(
-                    uiState = uiState
-                )
-
-                LanguageSupportCard()
+                    NipunBharatCard()
+                    SystemStatusCard(uiState = uiState)
+                }
             }
         }
     }
@@ -135,40 +131,59 @@ fun HomeScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HomeTopBar(uiState: HomeUiState, onSettings: () -> Unit) {
+private fun HomeTopBar(
+    isOfflineReady: Boolean,
+    onSettings: () -> Unit
+) {
     TopAppBar(
         title = {
             Column {
                 Text(
-                    "PALASH VoiceBridge",
+                    text = "PALASH VoiceBridge",
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
                 Text(
-                    "Teach in Hindi. Learn in Your Mother Tongue.",
+                    text = "Teach in Hindi. Learn in Your Mother Tongue.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.85f)
                 )
             }
         },
         actions = {
-            // Offline indicator
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = if (uiState.isOfflineReady) OfflineReadyGreen else DemoModeAmber
+                color = if (isOfflineReady) OfflineReadyGreen else DemoModeAmber
             ) {
-                Text(
-                    text = if (uiState.isOfflineReady) "OFFLINE READY" else "DEMO MODE",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .background(Color.White, CircleShape)
+                    )
+                    Text(
+                        text = if (isOfflineReady) "OFFLINE READY" else "DEMO MODE",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
             Spacer(Modifier.width(8.dp))
-            IconButton(onClick = onSettings) {
-                Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Color.White)
+            IconButton(
+                onClick = onSettings,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Settings",
+                    tint = Color.White
+                )
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -177,54 +192,94 @@ private fun HomeTopBar(uiState: HomeUiState, onSettings: () -> Unit) {
     )
 }
 
+/** Prominent Hero Voice Translation Card */
 @Composable
-private fun HeroTranslationCard(onStart: () -> Unit, modifier: Modifier = Modifier) {
+private fun HeroVoiceSection(onStart: () -> Unit) {
     Card(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onStart),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = PalashGreen),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        colors = CardDefaults.cardColors(containerColor = SurfaceLight),
+        border = BorderStroke(1.dp, OutlineBorderLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
-                Icons.Filled.RecordVoiceOver,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(48.dp)
-            )
-            Spacer(Modifier.height(12.dp))
+            // Language Pair Badge
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = PalashGreenContainer,
+                contentColor = PalashGreenOnContainer
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Hindi",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Translates to",
+                        modifier = Modifier.size(14.dp),
+                        tint = PalashGreen
+                    )
+                    Text(
+                        text = "Santali (Ol Chiki)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            // Title & Mission Subtitle
             Text(
-                "LIVE TRANSLATION",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.ExtraBold,
-                color = Color.White,
+                text = "Offline Mother-Tongue Classroom Assistant",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimaryLight,
                 textAlign = TextAlign.Center
             )
+
             Text(
-                "Speak Hindi. Play it in Santhali.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White.copy(alpha = 0.85f),
-                textAlign = TextAlign.Center
+                text = "Speak a Hindi classroom phrase. PALASH will translate it into the student's mother tongue.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondaryLight,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 8.dp)
             )
-            Spacer(Modifier.height(16.dp))
+
+            Spacer(Modifier.height(4.dp))
+
+            // Primary Action Button: 🎙️ Tap to Speak
             Button(
                 onClick = onStart,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White,
-                    contentColor = PalashGreen
+                    containerColor = PalashGreen,
+                    contentColor = Color.White
                 ),
-                shape = RoundedCornerShape(24.dp)
+                shape = RoundedCornerShape(28.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
             ) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
+                Icon(
+                    imageVector = Icons.Filled.Mic,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(Modifier.width(10.dp))
                 Text(
-                    "START TRANSLATION",
-                    style = MaterialTheme.typography.labelLarge,
+                    text = "Tap to Speak",
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -232,8 +287,70 @@ private fun HeroTranslationCard(onStart: () -> Unit, modifier: Modifier = Modifi
     }
 }
 
+/** Tools & Navigation Section with Icon + Text */
 @Composable
-private fun FeatureCard(
+private fun ToolsGridSection(
+    onCurriculum: () -> Unit,
+    onWorksheets: () -> Unit,
+    onFlashcards: () -> Unit,
+    onSettings: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = "Classroom Learning Tools",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = TextPrimaryLight
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ToolCard(
+                icon = Icons.Filled.MenuBook,
+                title = "Curriculum",
+                subtitle = "Browse 120+ phrases",
+                color = PalashGreen,
+                onClick = onCurriculum,
+                modifier = Modifier.weight(1f)
+            )
+            ToolCard(
+                icon = Icons.Filled.Description,
+                title = "Worksheets",
+                subtitle = "Printable A4 PDF",
+                color = PalashEarth,
+                onClick = onWorksheets,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ToolCard(
+                icon = Icons.Filled.Style,
+                title = "Flashcards",
+                subtitle = "Visual card sets",
+                color = PalashEarth,
+                onClick = onFlashcards,
+                modifier = Modifier.weight(1f)
+            )
+            ToolCard(
+                icon = Icons.Filled.Settings,
+                title = "Settings",
+                subtitle = "Voice & AI models",
+                color = MutedSlate,
+                onClick = onSettings,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ToolCard(
     icon: ImageVector,
     title: String,
     subtitle: String,
@@ -242,102 +359,91 @@ private fun FeatureCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier
+            .defaultMinSize(minHeight = 84.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.08f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        colors = CardDefaults.cardColors(containerColor = SurfaceLight),
+        border = BorderStroke(1.dp, OutlineBorderLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Row(
+            modifier = Modifier
+                .padding(14.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(32.dp))
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = color)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = color.copy(alpha = 0.12f),
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = color,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimaryLight
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondaryLight
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun StatusCard(uiState: HomeUiState) {
+private fun SystemStatusCard(uiState: HomeUiState) {
     Card(
         shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(2.dp)
+        colors = CardDefaults.cardColors(containerColor = SurfaceLight),
+        border = BorderStroke(1.dp, OutlineBorderLight),
+        elevation = CardDefaults.cardElevation(1.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Component Status", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            HorizontalDivider()
+            Text(
+                text = "System Diagnostics",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimaryLight
+            )
+            HorizontalDivider(color = OutlineBorderLight)
             StatusRow(
-                label = "NETWORK",
-                value = "Not Required",
+                label = "Internet Access",
+                value = "None (100% Offline)",
                 valueColor = OfflineReadyGreen
             )
             StatusRow(
-                label = "CURRICULUM",
-                value = if (uiState.curriculumCount > 0) "Ready (${uiState.curriculumCount})" else "Loading...",
-                valueColor = if (uiState.curriculumCount > 0) OfflineReadyGreen else DemoModeAmber
-            )
-            StatusRow(
-                label = "HINDI ASR",
+                label = "Hindi Speech ASR",
                 value = uiState.asrStatus,
                 valueColor = if (uiState.asrStatus == "Ready") OfflineReadyGreen else DemoModeAmber
             )
             StatusRow(
-                label = "SANTHALI TTS",
+                label = "Santali Speech TTS",
                 value = uiState.ttsStatus,
                 valueColor = if (uiState.ttsStatus == "Ready") OfflineReadyGreen else DemoModeAmber
             )
             StatusRow(
-                label = "TRANSLATION",
-                value = "Offline",
-                valueColor = OfflineReadyGreen
-            )
-        }
-    }
-}
-
-@Composable
-private fun LanguageSupportCard() {
-    Card(shape = RoundedCornerShape(12.dp), elevation = CardDefaults.cardElevation(2.dp)) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text("Language Support", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            HorizontalDivider()
-            LanguageRow("Hindi (Source)", "Hindi", OfflineReadyGreen, "Ready")
-            LanguageRow("Santhali", "Santhali", OfflineReadyGreen, "Demo Active")
-            LanguageRow("Ho", "Ho", DemoModeAmber, "Coming Soon")
-            LanguageRow("Mundari", "Mundari", DemoModeAmber, "Coming Soon")
-        }
-    }
-}
-
-@Composable
-private fun LanguageRow(name: String, nativeName: String, color: Color, status: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Text(name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-            Text(nativeName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = color.copy(alpha = 0.1f),
-            contentColor = color
-        ) {
-            Text(
-                status,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold
+                label = "Curriculum Database",
+                value = if (uiState.curriculumCount > 0) "${uiState.curriculumCount} verified entries" else "Loading...",
+                valueColor = if (uiState.curriculumCount > 0) OfflineReadyGreen else DemoModeAmber
             )
         }
     }
@@ -347,8 +453,9 @@ private fun LanguageRow(name: String, nativeName: String, color: Color, status: 
 private fun NipunBharatCard() {
     Card(
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
-        elevation = CardDefaults.cardElevation(1.dp)
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFEBF5FB)),
+        border = BorderStroke(1.dp, Color(0xFFBEE3F8)),
+        elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -358,7 +465,7 @@ private fun NipunBharatCard() {
             Icon(
                 Icons.Filled.School,
                 contentDescription = null,
-                tint = Color(0xFF1565C0),
+                tint = VerifiedBlue,
                 modifier = Modifier.size(28.dp)
             )
             Column {
@@ -366,14 +473,15 @@ private fun NipunBharatCard() {
                     "NIPUN Bharat Aligned",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1565C0)
+                    color = VerifiedBlue
                 )
                 Text(
-                    "Curriculum mapped to FLN learning outcomes for Grades 1-3",
+                    "Curriculum mapped to FLN learning outcomes for primary grades",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF1565C0).copy(alpha = 0.7f)
+                    color = TextSecondaryLight
                 )
             }
         }
     }
 }
+

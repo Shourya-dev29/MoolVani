@@ -162,11 +162,12 @@ fun SectionHeader(
     }
 }
 
-/** Back navigation top bar */
+/** Back navigation top bar with optional subtitle */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PalashTopBar(
     title: String,
+    subtitle: String? = null,
     onNavigateBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
@@ -176,26 +177,143 @@ fun PalashTopBar(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.85f)
+                    )
+                }
             }
         },
         navigationIcon = {
             if (onNavigateBack != null) {
-                IconButton(onClick = onNavigateBack) {
+                IconButton(
+                    onClick = onNavigateBack,
+                    modifier = Modifier.size(48.dp)
+                ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back"
+                        contentDescription = "Navigate Back",
+                        tint = Color.White
                     )
                 }
             }
         },
         actions = actions,
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.primary,
+            containerColor = PalashGreen,
             titleContentColor = Color.White,
             navigationIconContentColor = Color.White,
             actionIconContentColor = Color.White
         )
     )
 }
+
+/** Comprehensive Offline Status Breakdown Card */
+@Composable
+fun OfflineStatusBreakdownCard(
+    isOfflineReady: Boolean,
+    hasHindiVoice: Boolean = true,
+    hasSantaliVoice: Boolean = true,
+    curriculumPhraseCount: Int = 120,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOfflineReady) PalashGreenContainer else SurfaceVariantLight
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .background(
+                                color = if (isOfflineReady) OfflineReadyGreen else DemoModeAmber,
+                                shape = RoundedCornerShape(5.dp)
+                            )
+                    )
+                    Text(
+                        text = if (isOfflineReady) "Offline Ready" else "Curriculum Demo Mode",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isOfflineReady) PalashGreen else DemoModeAmber
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = (if (isOfflineReady) OfflineReadyGreen else DemoModeAmber).copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = "100% On-Device",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isOfflineReady) OfflineReadyGreen else DemoModeAmber
+                    )
+                }
+            }
+
+            HorizontalDivider(color = OutlineBorderLight)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                StatusTickItem(
+                    label = "Hindi voice",
+                    isReady = hasHindiVoice
+                )
+                StatusTickItem(
+                    label = "Santali voice",
+                    isReady = hasSantaliVoice
+                )
+                StatusTickItem(
+                    label = "Curriculum ($curriculumPhraseCount)",
+                    isReady = curriculumPhraseCount > 0
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusTickItem(label: String, isReady: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondaryLight,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            text = if (isReady) "✓" else "—",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (isReady) OfflineReadyGreen else DemoModeAmber
+        )
+    }
+}
+

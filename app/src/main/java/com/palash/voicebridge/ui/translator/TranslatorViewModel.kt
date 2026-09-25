@@ -61,13 +61,14 @@ class TranslatorViewModel(private val context: Context) : ViewModel() {
     private val translationEngine = TranslationEngine(db.curriculumDao())
     private val modelManager = ModelManager(context)
     private val audioPlayer = AudioPlayer()
-    private val audioRecorder = AudioRecorder()
+    private val audioRecorder = AudioRecorder(context)
     private val latencyTracker = LatencyTracker()
 
     private var recognizer: OfflineSpeechRecognizer = DemoSpeechRecognizer()
     private var ttsEngine: OfflineTtsEngine = DemoTtsEngine(context)
     private var recordingJob: Job? = null
     private var lastAudioData: ShortArray? = null
+    private var lastSampleRate: Int = 16000
 
     private val _uiState = MutableStateFlow(TranslatorUiState())
     val uiState: StateFlow<TranslatorUiState> = _uiState.asStateFlow()
@@ -91,7 +92,7 @@ class TranslatorViewModel(private val context: Context) : ViewModel() {
         }
 
         ttsEngine = if (hasLiveTts) {
-            SherpaTtsEngine(context).apply { initialize("sat") }
+            SherpaTtsEngine.getInstance(context).apply { initialize("sat") }
         } else {
             DemoTtsEngine(context).apply { initialize("sat") }
         }
@@ -118,6 +119,23 @@ class TranslatorViewModel(private val context: Context) : ViewModel() {
     /** User tapped microphone button */
     fun startListening() {
         recordingJob?.cancel()
+
+        // Verify runtime RECORD_AUDIO permission
+        val hasAudioPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (!hasAudioPermission) {
+            android.util.Log.e("TranslatorViewModel", "PALASH_AUDIO: RECORD_AUDIO permission = DENIED")
+            _uiState.value = _uiState.value.copy(
+                state = TranslatorState.ERROR,
+                errorMessage = "Microphone permission is required. Please grant RECORD_AUDIO permission in device settings."
+            )
+            return
+        }
+        android.util.Log.i("TranslatorViewModel", "PALASH_AUDIO: RECORD_AUDIO permission = GRANTED")
+
         _uiState.value = _uiState.value.copy(
             state = TranslatorState.LISTENING,
             hindiInput = "",
@@ -128,14 +146,17 @@ class TranslatorViewModel(private val context: Context) : ViewModel() {
         recordingJob = viewModelScope.launch(Dispatchers.Default) {
             latencyTracker.markStart()
             try {
+                // Initialize recognizer stream for new utterance
+                recognizer.startStreaming()
                 audioRecorder.recordingFlow().collect { chunk ->
                     recognizer.feedAudio(chunk)
-                    _uiState.value = _uiState.value.copy(state = TranslatorState.RECOGNIZING)
+                    // Keep state = LISTENING so UI stays responsive and allows tapping to stop
                 }
             } catch (e: Exception) {
+                android.util.Log.e("TranslatorViewModel", "PALASH_AUDIO_ERROR: Recording collection error: ${e.message}", e)
                 _uiState.value = _uiState.value.copy(
                     state = TranslatorState.ERROR,
-                    errorMessage = e.message ?: "Audio capture error"
+                    errorMessage = "Microphone error: ${e.message}"
                 )
             }
         }
@@ -145,33 +166,39 @@ class TranslatorViewModel(private val context: Context) : ViewModel() {
         audioRecorder.stop()
         recordingJob?.cancel()
 
+        _uiState.value = _uiState.value.copy(state = TranslatorState.RECOGNIZING)
+
         viewModelScope.launch(Dispatchers.Default) {
             val result = recognizer.stopStreaming()
             latencyTracker.mark(LatencyTracker.STAGE_ASR)
+            android.util.Log.i("TranslatorViewModel", "PALASH_PIPELINE: ASR final result='${result.text}', isSuccess=${result.isSuccess}")
 
-            if (result.isSuccess) {
+            if (result.isSuccess && result.text.isNotBlank()) {
                 processRecognizedText(result.text)
             } else {
                 if (_uiState.value.isDemoMode) {
                     // In demo mode with mic, use a standard classroom phrase to demonstrate the pipeline
                     val fallbackDemoPhrase = DemoSpeechRecognizer.DEMO_PHRASES.first()
+                    android.util.Log.i("TranslatorViewModel", "PALASH_PIPELINE: Using demo phrase fallback '$fallbackDemoPhrase'")
                     processRecognizedText(fallbackDemoPhrase)
                 } else {
+                    android.util.Log.w("TranslatorViewModel", "PALASH_PIPELINE_ERROR: Speech was not recognized clearly")
                     _uiState.value = _uiState.value.copy(
                         state = TranslatorState.ERROR,
-                        errorMessage = result.errorMessage ?: "Speech recognition produced no text"
+                        errorMessage = "Speech was not recognized clearly. Please tap to speak again."
                     )
                 }
             }
         }
     }
 
-    /** Demo mode: user explicitly selected a phrase from the catalog */
+    /** Demo mode / Catalog selection: user explicitly selected a phrase from the catalog */
     fun selectDemoPhrase(phrase: String) {
         viewModelScope.launch(Dispatchers.Default) {
             _uiState.value = _uiState.value.copy(
                 state = TranslatorState.RECOGNIZING,
-                hindiInput = phrase
+                hindiInput = phrase,
+                errorMessage = null
             )
             latencyTracker.markStart()
             latencyTracker.mark(LatencyTracker.STAGE_ASR)
@@ -194,8 +221,10 @@ class TranslatorViewModel(private val context: Context) : ViewModel() {
             )
 
             latencyTracker.mark(LatencyTracker.STAGE_TRANSLATION)
+            android.util.Log.i("TranslatorViewModel", "PALASH_PIPELINE: curriculumMatch=${result.isAvailable}, matchType=${result.matchType}, olChikiLength=${result.translatedText?.length ?: 0}")
 
             if (!result.isAvailable) {
+                android.util.Log.w("TranslatorViewModel", "PALASH_PIPELINE: No verified curriculum match found for '$text'")
                 latencyTracker.markEnd()
                 _uiState.value = _uiState.value.copy(
                     state = TranslatorState.TRANSLATION_UNAVAILABLE,
@@ -227,35 +256,64 @@ class TranslatorViewModel(private val context: Context) : ViewModel() {
             val stages = latencyTracker.stageReport()
             val stats = latencyTracker.getTrialStats()
 
-            _uiState.value = _uiState.value.copy(
-                state = TranslatorState.SPEAKING,
-                latencyMs = totalLatency,
-                stageLatencies = stages,
-                trialStats = stats
-            )
-
-            // Play audio through AudioTrack
             if (ttsResult.isSuccess && ttsResult.audioData != null) {
                 lastAudioData = ttsResult.audioData
+                lastSampleRate = ttsResult.sampleRate
+
+                _uiState.value = _uiState.value.copy(
+                    state = TranslatorState.SPEAKING,
+                    latencyMs = totalLatency,
+                    stageLatencies = stages,
+                    trialStats = stats
+                )
+
                 latencyTracker.mark(LatencyTracker.STAGE_PLAYBACK)
                 audioPlayer.play(ttsResult.audioData, ttsResult.sampleRate)
-            }
 
-            _uiState.value = _uiState.value.copy(
-                state = TranslatorState.COMPLETED,
-                latencyMs = totalLatency,
-                stageLatencies = stages,
-                trialStats = stats
-            )
+                _uiState.value = _uiState.value.copy(
+                    state = TranslatorState.COMPLETED,
+                    latencyMs = totalLatency,
+                    stageLatencies = stages,
+                    trialStats = stats
+                )
+            } else {
+                android.util.Log.w("TranslatorViewModel", "PALASH_PIPELINE_ERROR: TTS synthesis produced no audio: ${ttsResult.errorMessage}")
+                _uiState.value = _uiState.value.copy(
+                    state = TranslatorState.COMPLETED,
+                    latencyMs = totalLatency,
+                    stageLatencies = stages,
+                    trialStats = stats,
+                    errorMessage = "Santali voice could not be started. The offline voice model could not produce audio."
+                )
+            }
         }
     }
 
     fun playAgain() {
         viewModelScope.launch(Dispatchers.Default) {
-            val audio = lastAudioData ?: return@launch
-            _uiState.value = _uiState.value.copy(state = TranslatorState.SPEAKING)
-            audioPlayer.play(audio)
-            _uiState.value = _uiState.value.copy(state = TranslatorState.COMPLETED)
+            val audio = lastAudioData
+            if (audio != null) {
+                _uiState.value = _uiState.value.copy(state = TranslatorState.SPEAKING)
+                audioPlayer.play(audio, lastSampleRate)
+                _uiState.value = _uiState.value.copy(state = TranslatorState.COMPLETED)
+            } else {
+                val textToPlay = _uiState.value.translatedText
+                if (!textToPlay.isNullOrBlank()) {
+                    _uiState.value = _uiState.value.copy(state = TranslatorState.SPEAKING)
+                    val ttsResult = ttsEngine.synthesize(textToPlay, speed = 1.0f)
+                    if (ttsResult.isSuccess && ttsResult.audioData != null) {
+                        lastAudioData = ttsResult.audioData
+                        lastSampleRate = ttsResult.sampleRate
+                        audioPlayer.play(ttsResult.audioData, ttsResult.sampleRate)
+                        _uiState.value = _uiState.value.copy(state = TranslatorState.COMPLETED)
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            state = TranslatorState.COMPLETED,
+                            errorMessage = "Santali voice could not be started. The offline voice model could not produce audio."
+                        )
+                    }
+                }
+            }
         }
     }
 

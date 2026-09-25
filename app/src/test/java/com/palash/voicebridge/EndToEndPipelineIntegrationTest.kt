@@ -113,4 +113,49 @@ class EndToEndPipelineIntegrationTest {
         assertTrue("Must contain verified SCERT foundational words", verifiedCount >= 30)
         assertTrue("Must contain explicit demo/review required entries", reviewCount >= 30)
     }
+
+    @Test
+    fun testSantaliTtsModel_olChikiTokensCoverage() {
+        // Read tokens.txt from assets
+        val tokensFile = java.io.File("src/main/assets/models/tts/santali/tokens.txt")
+        val altTokensFile = java.io.File("app/src/main/assets/models/tts/santali/tokens.txt")
+        val targetFile = if (tokensFile.exists()) tokensFile else altTokensFile
+
+        if (targetFile.exists()) {
+            val validTokens = targetFile.readLines().mapNotNull { line ->
+                val parts = line.split(" ")
+                if (parts.isNotEmpty()) parts[0] else null
+            }.toSet()
+
+            // Verify that verified curriculum phrases contain valid Ol Chiki characters
+            val seedPhrases = CurriculumSeed.getSeedPhrases().filter { it.verified && it.santhaliTranslation != null }
+            for (phrase in seedPhrases) {
+                val santali = phrase.santhaliTranslation!!
+                for (ch in santali) {
+                    if (ch != ' ' && ch != '-' && ch != '?' && ch != '!' && ch != '.') {
+                        val str = ch.toString()
+                        assertTrue(
+                            "Character '$str' (U+${Integer.toHexString(ch.code).uppercase()}) in phrase '$santali' must be in Santali Piper TTS token vocabulary",
+                            validTokens.contains(str)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun testTtsResult_successAndPlaybackContract() {
+        val mockSamples = ShortArray(1600) { (it % 100).toShort() }
+        val result = com.palash.voicebridge.domain.tts.TtsResult(
+            audioData = mockSamples,
+            sampleRate = 16000,
+            latencyMs = 120,
+            isDemoMode = false
+        )
+        assertTrue(result.isSuccess)
+        assertEquals(16000, result.sampleRate)
+        assertNotNull(result.audioData)
+        assertEquals(1600, result.audioData?.size)
+    }
 }

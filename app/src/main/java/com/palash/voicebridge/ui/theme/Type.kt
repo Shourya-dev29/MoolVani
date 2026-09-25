@@ -21,12 +21,12 @@ val PalashTypography = Typography(
         fontSize = 28.sp,
         lineHeight = 36.sp
     ),
-    // Translation output text — large for classroom visibility
+    // Translation output text — large Ol Chiki for classroom visibility
     displaySmall = TextStyle(
         fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 24.sp,
-        lineHeight = 32.sp
+        fontWeight = FontWeight.Bold,
+        fontSize = 28.sp,
+        lineHeight = 36.sp
     ),
     // Section headers
     headlineLarge = TextStyle(

@@ -1,4 +1,4 @@
-﻿package com.palash.voicebridge.utils
+package com.palash.voicebridge.utils
 
 import com.palash.voicebridge.models.AppMode
 import com.palash.voicebridge.models.ModelManager
@@ -30,12 +30,14 @@ data class OfflineStatus(
 
 enum class ComponentStatus {
     READY,
+    INSTALLED,
     DEMO,
     MISSING,
     ERROR;
 
     val displayLabel: String get() = when (this) {
         READY -> "Ready"
+        INSTALLED -> "Installed — not ready"
         DEMO -> "Demo Mode"
         MISSING -> "Model Missing"
         ERROR -> "Error"
@@ -45,10 +47,21 @@ enum class ComponentStatus {
 class OfflineStatusManager(private val modelManager: ModelManager) {
 
     fun buildStatus(curriculumCount: Int): OfflineStatus {
-        val asrStatus = if (modelManager.isHindiAsrReady)
-            ComponentStatus.READY else ComponentStatus.DEMO
-        val ttsStatus = if (modelManager.isSanthaliTtsReady)
-            ComponentStatus.READY else ComponentStatus.DEMO
+        val asrModelState = modelManager.getModelState("hindi_asr")?.status
+        val asrStatus = when (asrModelState) {
+            ModelStatus.READY -> ComponentStatus.READY
+            ModelStatus.INSTALLED -> ComponentStatus.INSTALLED
+            ModelStatus.MISSING -> ComponentStatus.MISSING
+            else -> ComponentStatus.DEMO
+        }
+
+        val ttsModelState = modelManager.getModelState("santhali_tts")?.status
+        val ttsStatus = when (ttsModelState) {
+            ModelStatus.READY -> ComponentStatus.READY
+            ModelStatus.INSTALLED -> ComponentStatus.INSTALLED
+            ModelStatus.MISSING -> ComponentStatus.MISSING
+            else -> ComponentStatus.DEMO
+        }
 
         return OfflineStatus(
             networkRequired = false,
